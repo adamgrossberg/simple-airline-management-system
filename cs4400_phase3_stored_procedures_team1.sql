@@ -403,8 +403,9 @@ delimiter ;
 -- -----------------------------------------------------------------------------
 create or replace view flights_in_the_air (departing_from, arriving_at, num_flights,
 	flight_list, earliest_arrival, latest_arrival, airplane_list) as
-select '_', '_', '_', '_', '_', '_', '_';
-
+select airportID, airportID, count(*), flightID, min(run_time), max(run_time), airplaneID
+from airport, flight, airplane
+where airplane_status = 'in_flight';
 -- [15] flights_on_the_ground()
 -- -----------------------------------------------------------------------------
 /* This view describes where flights that are currently on the ground are located. */
