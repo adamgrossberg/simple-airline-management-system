@@ -94,6 +94,7 @@ create procedure add_person (in ip_personID varchar(50), in ip_first_name varcha
 sp_main: begin
 insert into person values(ip_personID, ip_first_name, ip_last_name, ip_locationID, 
 ip_taxID, ip_experience, ip_miles, ip_funds);
+
 end //
 delimiter ;
 
@@ -106,14 +107,12 @@ drop procedure if exists grant_or_revoke_pilot_license;
 delimiter //
 create procedure grant_or_revoke_pilot_license (in ip_personID varchar(50), in ip_license varchar(100))
 sp_main: begin
-if ((ip_personID, ip_license) in pilot_licenses)
-BEGIN
-remove from pilot_licenses value(ip_personID, ip_license);
-END;
-else 
-BEGIN
+IF (select count(*) from pilot_licenses where personID = ip_personID and license = ip_license > 0)
+THEN
+DELETE from pilot_licenses where value = (ip_personID, ip_license);
+ELSE
 insert into pilot_licenses value(ip_personID, ip_license);
-END;
+END IF;
 end //
 delimiter ;
 
@@ -149,6 +148,22 @@ delimiter //
 create procedure flight_landing (in ip_flightID varchar(50))
 sp_main: begin
 
+DECLARE dist integer DEFAULT 0;
+
+update flight 
+set next_time = next_time.hours + 1, airplane_status = 'on_ground'
+where flightID = ip_flightID;
+
+update pilot
+set experience = experience + 1
+where commanding_flight = ip_flightID;
+
+set dist = (select distance from leg where leg.legID in (select legID from route_path
+where route_id in (select route_id from flight where flightID = ip_flightID)));
+
+update (passenger join person on passenger.personID = person.personID)
+set miles = miles + 0
+where flightID = ip_flightID;
 end //
 delimiter ;
 
@@ -165,7 +180,7 @@ drop procedure if exists flight_takeoff;
 delimiter //
 create procedure flight_takeoff (in ip_flightID varchar(50))
 sp_main: begin
-
+# Krishnav make sure to increase progress by 1 here. I don't do it in flight_landing
 end //
 delimiter ;
 
@@ -181,7 +196,21 @@ drop procedure if exists passengers_board;
 delimiter //
 create procedure passengers_board (in ip_flightID varchar(50))
 sp_main: begin
+DECLARE cap integer DEFAULT 0; #Total number of eligible passengers to board
+DECLARE plane varchar(50); #AirplaneID of the airplane responsible for the flight
+DECLARE ploc varchar(50); #the locationID of the airplane
 
+
+
+set plane = (select airplaneID from airplane where (airlineID, tail_num) in 
+(select support_airline, support_tail from flight where flightID = ip_flightID));
+set ploc = (select locationID from airplane where airplaneID = plane);
+set cap = (select count(*) from passenger where personID in (select personID from person where 
+locationID = ploc));
+
+IF (cap <= (select seat_capacity from airplane where airplaneID = plane)) THEN
+
+END IF;
 end //
 delimiter ;
 
@@ -211,7 +240,20 @@ drop procedure if exists assign_pilot;
 delimiter //
 create procedure assign_pilot (in ip_flightID varchar(50), ip_personID varchar(50))
 sp_main: begin
+DECLARE plane varchar(50); # the airplaneID of the plane operating the flight
+DECLARE ptype varchar(100); #propeller or jet
 
+
+set plane = (select airplaneID from airplane where (airlineID, tail_num) in 
+(select support_airline, support_tail from flight where flightID = ip_flightID));
+set ptype = (select plane_type from airplane where airplaneID = plane);
+if (ip_personID in (select personID from pilot) and (ip_personID, ptype) in (select * from pilot_licenses)) then
+if ((select locationID from person where personID = ip_personID) not like '%plane%') then
+update person 
+set locationID = (select locationID from airplane where airplaneID = plane)
+where personID = ip_personID;
+end if;
+end if;
 end //
 delimiter ;
 
