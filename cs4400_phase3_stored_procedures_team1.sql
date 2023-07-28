@@ -57,9 +57,11 @@ sp_main: begin
 ##airlineID and locationID are foreign keys, so must be in airline and location tables respectively
 ##tail_number is a primary key attribute and cannot be null
 ##seat_capacity and speed must both be non-null and positive
-if (ip_airlineID in (select airlineID from airline) and ip_tail_number != null and ip_seat_capacity != null 
-and ip_seat_capacity > 0 and ip_speed != null and ip_speed > 0 
-and ip_locationID in (select locationID from location)) THEN
+if (ISNULL(ip_airlineID) = 0 and ip_airlineID in 
+(select airlineID from airline) and ISNULL(ip_tail_num) = 0 and (ip_airlineID, ip_tail_num) not in 
+(select airlineID, tail_num from airplane) 
+and ISNULL(ip_locationID) = 0 and ip_locationID not in (select locationID from location)
+and ISNULL(ip_seat_capacity) = 0 and ISNULL(ip_speed) = 0 and ip_seat_capacity > 0 and ip_speed > 0) THEN
 insert into airplane values(ip_airlineID, ip_tail_num, ip_seat_capacity, 
 ip_speed, ip_locationID, ip_plane_type, ip_skids,ip_propellers, ip_jet_engines);
 END IF;
