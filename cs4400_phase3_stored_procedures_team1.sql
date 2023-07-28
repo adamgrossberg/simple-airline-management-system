@@ -410,7 +410,9 @@ and A.airportID = (select departure from leg where legID in
 (select legID from route_path where (routeID in (select routeID from flight where airplane_status = 'in_flight')
 and sequence = progress))) and B.airportID = (select arrival from leg where legID in 
 (select legID from route_path where (routeID in (select routeID from flight where airplane_status = 'in_flight')
-and sequence = progress))); -- [15] flights_on_the_ground()
+and sequence = progress)))
+group by (A.airportID, B.airportID); 
+-- [15] flights_on_the_ground()
 -- -----------------------------------------------------------------------------
 /* This view describes where flights that are currently on the ground are located. */
 -- -----------------------------------------------------------------------------
