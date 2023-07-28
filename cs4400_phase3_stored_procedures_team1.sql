@@ -62,6 +62,7 @@ if (ISNULL(ip_airlineID) = 0 and ip_airlineID in
 (select airlineID, tail_num from airplane) 
 and ISNULL(ip_locationID) = 0 and ip_locationID not in (select locationID from location)
 and ISNULL(ip_seat_capacity) = 0 and ISNULL(ip_speed) = 0 and ip_seat_capacity > 0 and ip_speed > 0) THEN
+insert into location values(ip_locationID);
 insert into airplane values(ip_airlineID, ip_tail_num, ip_seat_capacity, 
 ip_speed, ip_locationID, ip_plane_type, ip_skids,ip_propellers, ip_jet_engines);
 END IF;
