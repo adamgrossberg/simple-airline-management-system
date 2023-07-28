@@ -81,8 +81,10 @@ delimiter //
 create procedure add_airport (in ip_airportID char(3), in ip_airport_name varchar(200),
     in ip_city varchar(100), in ip_state varchar(100), in ip_country char(3), in ip_locationID varchar(50))
 sp_main: begin
-if (ip_airportID != null and ip_city != null and 
-ip_state != null and ip_country != null and ip_location in (select locationID from location)) then
+if (isnull(ip_airportID) = 0 and ip_airportID not in (select airportID from airport) 
+and isnull(ip_city) = 0 and isnull(ip_state) = 0 and isnull(ip_country) = 0 
+and isnull(ip_locationID) = 0 and ip_locationID not in (select locationID from location)) then
+insert into location values(ip_locationID);
 insert into airport values(ip_airportID, ip_airport_name, ip_city, ip_state, ip_country, ip_locationID);
 end if;
 end //
@@ -106,10 +108,11 @@ create procedure add_person (in ip_personID varchar(50), in ip_first_name varcha
     in ip_last_name varchar(100), in ip_locationID varchar(50), in ip_taxID varchar(50),
     in ip_experience integer, in ip_miles integer, in ip_funds integer)
 sp_main: begin
-if(ip_first_name != null and ip_personID != null and ip_locationID in (select locationID from location)) then
+if(isnull(ip_first_name) = 0 and isnull(ip_personID) = 0 and ip_personID not in (select personID from person) 
+and ip_locationID in (select locationID from location)) then
 insert into person values(ip_personID, ip_first_name, ip_last_name, ip_locationID);
-if(ip_taxID != null) then #checks if the person is a pilot
-insert into pilot values (ip_personID, ip_taxID, ip_experience, null, ip_personID);
+if(isnull(ip_taxID) = 0) then #checks if the person is a pilot
+insert into pilot values (ip_personID, ip_taxID, ip_experience, null);
 else #if not a pilot, is a passenger
 insert into passenger values (ip_personID, ip_miles, ip_funds);
 end if;
@@ -127,11 +130,12 @@ drop procedure if exists grant_or_revoke_pilot_license;
 delimiter //
 create procedure grant_or_revoke_pilot_license (in ip_personID varchar(50), in ip_license varchar(100))
 sp_main: begin
-IF (select count(*) from pilot_licenses where personID = ip_personID and license = ip_license > 0)
-THEN
-DELETE from pilot_licenses where value = (ip_personID, ip_license);
+IF (isnull(ip_personID) = 0 and isnull(ip_license) = 0 and ip_personID in (select personID from pilot)) THEN
+IF ((ip_personID, ip_license) in (select * from pilot_licenses))THEN
+DELETE from pilot_licenses where (personID, license) = (ip_personID, ip_license);
 ELSE
-insert into pilot_licenses value(ip_personID, ip_license);
+insert into pilot_licenses values(ip_personID, ip_license);
+END IF;
 END IF;
 end //
 delimiter ;
