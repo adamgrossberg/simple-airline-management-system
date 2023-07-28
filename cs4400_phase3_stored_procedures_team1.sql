@@ -148,6 +148,32 @@ create procedure offer_flight (in ip_flightID varchar(50), in ip_routeID varchar
     in ip_support_airline varchar(50), in ip_support_tail varchar(50), in ip_progress integer,
     in ip_airplane_status varchar(100), in ip_next_time time, in ip_cost integer)
 sp_main: begin
+IF (ip_routeID not in (select routeID from route)) 
+	then leave sp_main; END if; -- Valid route checking
+    
+IF (ip_support_tail is not null and ip_support_tail not in (select support_tail from flight where flight_id =! ip_flightID))
+	then leave sp_main; END if; -- Airplane not in use 
+    
+IF (ip_support_airline is not null and ip_support_tail not in 
+ (select 1 from airplane where airlineID = ip_support_airline and tail_num = ip_support_tail))
+	then leave sp_main; END if; -- Airplane conditional 
+    
+IF ip_progress >= (select max(sequence) from route_path where routeID = ip_routeID group by routeID)
+	then leave sp_main; END if; -- checking for !final stop 
+
+if (ip_flightID in (select flightID from flight)) then
+	update flight
+    set routeID = ip_routeID,
+		support_airline = ip_support_airline,
+        support_tail = ip_support_tail,
+        progress = ip_progess,
+        airplane_status = 'on_ground',
+        next_time = ip_next_time,
+        cost = ip_cost
+    where flightID = ip_flightID; leave sp_main; END if;
+    
+insert into flight values (ip_flightID, ip_routeID, ip_support_airline, ip_support_tail, ip_progress, 
+	ip_airplane_status, ip_next_time, ip_cost);
 
 end //
 delimiter ;
@@ -197,9 +223,20 @@ drop procedure if exists flight_takeoff;
 delimiter //
 create procedure flight_takeoff (in ip_flightID varchar(50))
 sp_main: begin
+declare distance integer default 0;
+declare speedvar integer default 0;
+declare str varchar(50);
 # Krishnav make sure to increase progress by 1 here. I don't do it in flight_landing
+set distance = 5;
+set speedvar = (select speed from airplane where );
+
+
+
+
 end //
 delimiter ;
+
+call flight_takeoff('dl_10');
 
 -- [8] passengers_board()
 -- -----------------------------------------------------------------------------
@@ -275,6 +312,11 @@ drop procedure if exists passengers_disembark;
 delimiter //
 create procedure passengers_disembark (in ip_flightID varchar(50))
 sp_main: begin
+declare arrivalAirport varchar(50);
+declare arrivalAirport varchar(50);
+if ip_flightID is null then leave sp_main; end if;
+if ip_flightID not in (select flight_ID from flight) then leave sp_main; end if;
+
 
 end //
 delimiter ;
