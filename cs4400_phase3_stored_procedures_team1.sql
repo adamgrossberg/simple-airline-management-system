@@ -155,6 +155,35 @@ create procedure offer_flight (in ip_flightID varchar(50), in ip_routeID varchar
     in ip_support_airline varchar(50), in ip_support_tail varchar(50), in ip_progress integer,
     in ip_airplane_status varchar(100), in ip_next_time time, in ip_cost integer)
 sp_main: begin
+<<<<<<< Updated upstream
+=======
+IF (ip_routeID not in (select routeID from route)) 
+	then leave sp_main; END if; -- Valid route checking
+    
+IF (ip_support_tail is not null and ip_support_tail not in (select support_tail from flight where flight_id != ip_flightID))
+	then leave sp_main; END if; -- Airplane not in use 
+    
+IF (ip_support_airline is not null and ip_support_tail not in 
+ (select 1 from airplane where airlineID = ip_support_airline and tail_num = ip_support_tail))
+	then leave sp_main; END if; -- Airplane conditional 
+    
+IF ip_progress >= (select max(sequence) from route_path where routeID = ip_routeID group by routeID)
+	then leave sp_main; END if; -- checking for !final stop 
+
+if (ip_flightID in (select flightID from flight)) then
+	update flight
+    set routeID = ip_routeID,
+		support_airline = ip_support_airline,
+        support_tail = ip_support_tail,
+        progress = ip_progess,
+        airplane_status = 'on_ground',
+        next_time = ip_next_time,
+        cost = ip_cost
+    where flightID = ip_flightID; leave sp_main; END if;
+    
+insert into flight values (ip_flightID, ip_routeID, ip_support_airline, ip_support_tail, ip_progress, 
+	ip_airplane_status, ip_next_time, ip_cost);
+>>>>>>> Stashed changes
 
 end //
 delimiter ;
@@ -214,13 +243,38 @@ drop procedure if exists flight_takeoff;
 delimiter //
 create procedure flight_takeoff (in ip_flightID varchar(50))
 sp_main: begin
-declare distance integer default 0;
-declare speedvar integer default 0;
-declare str varchar(50);
+
+declare legTime datetime default '00:00:00';
+declare numpilots integer default 0;
 # Krishnav make sure to increase progress by 1 here. I don't do it in flight_landing
+<<<<<<< Updated upstream
 set distance = 5;
 set speedvar = (select speed from airplane where );
 
+=======
+-- set speedvar
+
+IF (Select plane_type from airplane where tail_num = 
+	(select support_tail from flight where flightID = ip_flightID) = 'prop') then set numpilots = 1;
+		ELSE set numpilots = 2; END if;
+IF (Select count(*) from pilot where commanding_flight = ip_flightID) != numpilots then
+	update flight
+    set next_time = add_time(next_time, '00:30:00')
+    where flightID = ip_flightID;
+    leave sp_main; END if;
+    
+    set legTime = leg_time((select distance from leg where legID in
+		(select legID from route_path where (routeID, sequence) in
+        (select routeID and progress from flight where flightID = ip_flightID))),
+        (select speed from airplane where tail_num in
+        (select support_tail from flight where flightID = ip_flightID)));
+        
+	update flight 
+    set airplane_status = 'in flight',
+    progress = progress + 1,
+    next_time = addtime(next_time, legTime) 
+    where flightID = ip_flightID;
+>>>>>>> Stashed changes
 
 end //
 delimiter ;
