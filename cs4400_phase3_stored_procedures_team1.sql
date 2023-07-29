@@ -632,14 +632,15 @@ delimiter ;
 -- -----------------------------------------------------------------------------
 create or replace view flights_in_the_air (departing_from, arriving_at, num_flights,
 	flight_list, earliest_arrival, latest_arrival, airplane_list) as
-select A.airportID, B.airportID, count(*), flightID, min(next_time), max(next_time), tail_num
-from airport as A, airport as B, flight, airplane
-where airplane_status = 'in_flight' and tail_num = support_tail
-and A.airportID = (select departure from leg where legID in 
-(select legID from route_path where (routeID in (select routeID from flight where airplane_status = 'in_flight')
-and sequence = progress))) and B.airportID = (select arrival from leg where legID in 
-(select legID from route_path where (routeID in (select routeID from flight where airplane_status = 'in_flight')
-and sequence = progress))); 
+select l.departure as departing_from, l.arrival as arriving_at, count(distinct f.flightID) as num_flights, 
+group_concat(distinct concat(f.flightID) order by f.flightID asc separator ',') flight_list, 
+min(f.next_time) as earliest_arrival, max(f.next_time) as latest_arrival, 
+group_concat(a.locationID order by f.flightID asc separator ',') airplane_list
+from flight as f join route_path rp on f.routeID = rp.routeID and f.progress = rp.sequence join leg l 
+on rp.legID = l.legID left join airplane a on f.support_airline = a.airlineID and f.support_tail = a.tail_num
+where airplane_status = 'in_flight'
+group by l.departure, l.arrival; 
+
 -- [15] flights_on_the_ground()
 -- -----------------------------------------------------------------------------
 /* This view describes where flights that are currently on the ground are located. */
@@ -665,7 +666,17 @@ select l.departure as departing_from,
 create or replace view people_in_the_air (departing_from, arriving_at, num_airplanes,
 	airplane_list, flight_list, earliest_arrival, latest_arrival, num_pilots,
 	num_passengers, joint_pilots_passengers, person_list) as
-select '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_';
+select l.departure as departing_from, l.arrival as arriving_at, count(distinct f.flightID) as num_airplanes, 
+group_concat(distinct concat(a.locationID) order by f.flightID asc separator ',') airplane_list, 
+group_concat(distinct concat(f.flightID) order by f.flightID asc separator ',') flight_list,
+min(f.next_time) as earliest_arrival, max(f.next_time) as latest_arrival, count(pil.personID) as num_pilots, count(pa.personID) as 
+num_passengers, count(p.personID) as joint_pilots_passengers, group_concat(p.personID order by p.personID asc separator ',')
+person_list
+from flight as f join route_path as rp on rp.routeID = f.routeID and rp.sequence = f.progress join leg l on rp.legID = l.legID
+left join airplane a on a.airlineID = f.support_airline and a.tail_num = f.support_tail left join person as p 
+on p.locationID = a.locationID left join pilot pil on p.personID = pil.personID left join passenger pa on p.personID = pa.personID
+where airplane_status = 'in_flight'
+group by l.departure, l.arrival;
 
 -- [17] people_on_the_ground()
 -- -----------------------------------------------------------------------------
@@ -681,7 +692,11 @@ select '_', '_', '_', '_', '_', '_', '_', '_', '_', '_';
 -- -----------------------------------------------------------------------------
 create or replace view route_summary (route, num_legs, leg_sequence, route_length,
 	num_flights, flight_list, airport_sequence) as
-select '_', '_', '_', '_', '_', '_', '_';
+select rp.routeID, count(distinct l.legID), group_concat(distinct concat(l.legID) order by rp.sequence asc separator ',') 
+leg_sequence, sum(l.distance), count(distinct f.flightID), 
+group_concat(distinct concat(f.flightID) order by f.flightID asc separator ',') flight_list, 
+group_concat(distinct concat(l.departure, '->', l.arrival) order by rp.sequence asc separator ',') airport_sequence
+from route_path rp join leg l on rp.legID = l.legID left join flight f on rp.routeID = f.routeID group by rp.routeID;
 
 -- [19] alternative_airports()
 -- -----------------------------------------------------------------------------
