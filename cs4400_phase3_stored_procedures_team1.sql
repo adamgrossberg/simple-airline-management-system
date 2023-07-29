@@ -418,55 +418,63 @@ create procedure passengers_board (in ip_flightID varchar(50))
 sp_main: begin
 DECLARE cap integer DEFAULT 0; #Total number of eligible passengers to board
 DECLARE onboard integer DEFAULT 0; #The number of passengers currently on the plane
-DECLARE plane varchar(50); #tail_num of the airplane responsible for the flight
 DECLARE ploc varchar(50); #the locationID of the airplane
 DECLARE port varchar(50); #locationID of the airport where the airplane is currently located
 DECLARE prog int default 0; #progress int value of the flight
-DECLARE aport varchar(50); # AirportID of the airport where the airplane is currently located
 DECLARE route varchar(50); #routeID of the flight
 
-## Will only run if the airplane is currently on the ground
-if(select airplane_status from flight where flightID = ip_flightID not like 'in_flight') then #OUTER LOOP 1
+## Will only run if the airplane is currently on the ground and flight exists in the database
+if(isnull(ip_flightID) = 0 and ip_flightID in (select flightID from flight) and
+(select airplane_status from flight where flightID = ip_flightID) = 'on_ground') then #OUTER LOOP 1
 
 set prog = (select progress from flight where flightID = ip_flightID);
 set route = (select routeID from flight where flightID = ip_flightID); #Gets the routeID
-set plane = (select tail_num from airplane where (airlineID, tail_num) in 
+set ploc = (select locationID from airplane where (airlineID, tail_num) in 
 (select support_airline, support_tail from flight where flightID = ip_flightID));
-set ploc = (select locationID from airplane where tail_num = plane);
 
+## Makes sure that the route is not ended (aka prog < max sequence)
+IF (prog < (select count(*) from route_path where routeID = route)) THEN #OUTER LOOP 2
 # Gets the airport the airplane currently is
-IF ((select progress from flight where flightID = ip_flightID) = 0) THEN 
-set port = (select locationID from airport where airportID in (select destination from leg where legID in (
-select legID from route_path where routeID = route and progress + 1 = sequence)));
+IF (prog = 0) THEN 
+set port = (select locationID from airport where airportID in (select departure from leg where legID in (
+select legID from route_path where routeID = route and 1 = sequence)));
 ELSE 
 set port = (select locationID from airport where airportID in (select arrival from leg where legID in (
-select legID from route_path where routeID = route and progress = sequence)));
+select legID from route_path where routeID = route and prog = sequence)));
 END IF; 
-set aport = (select airportID from airport where locationID = port);
+##Makes sure that ploc and port are non-null before using them since they are sometimes null in the database. 
+IF (isnull(ploc) = 0 and isnull(port) = 0) #OUTER LOOP 3
+THEN
 set onboard = (select count(*) from person where personID in #Computes the number of people currently on the plane
 (select personID from passenger) and locationID = ploc);
 # Counts the number of potential passengers
 set cap = (select count(*) from passenger_vacations where personID in 
-(select personID from people where locationID = port) #finds all the people currently at the right airport
+(select personID from person where locationID = port) #finds all the people currently at the right airport
 #checks if their destination is one of the stops
 and airportID in (select airportID from airport where airportID in( 
-select arrival from leg where legID in 
-(select legID from route_path where route_id = route and sequence >= prog))));
+select departure from leg where legID in 
+(select legID from route_path where routeID = route and sequence > prog))));
 # Makes sure that people can actually board the plane
-IF (cap + onboard <= (select seat_capacity from airplane where tail_num = plane)) THEN #OUTER LOOP 2
+IF (cap + onboard <= (select seat_capacity from airplane where locationID = ploc) and cap > 0) 
+THEN #OUTER LOOP 4
 update person
 set locationID = ploc
 where personID in (select personID from passenger_vacations where personID in 
-(select personID from people where locationID = port) #finds all the people currently at the right airport
+(select personID from person where locationID = port) #finds all the people currently at the right airport
 #checks if their destination is one of the stops
 and airportID in (select airportID from airport where airportID in( 
-select arrival from leg where legID in 
-(select legID from route_path where route_id = route and sequence >= prog))));
+select departure from leg where legID in 
+(select legID from route_path where routeID = route and sequence > prog)))
+and personID in (select personID from passenger where funds > #makes sure that the passenger can afford the flight
+(select cost from flight where flightID = ip_flightID)));
 
+END IF; ##OUTER LOOP 4
+END IF; ##OUTER LOOP 3
 END IF; ##OUTER LOOP 2
 END IF; ##OUTER LOOP 1
 end //
 delimiter ;
+
 
 -- [9] passengers_disembark()
 -- -----------------------------------------------------------------------------
