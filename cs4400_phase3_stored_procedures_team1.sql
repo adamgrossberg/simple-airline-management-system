@@ -57,9 +57,12 @@ sp_main: begin
 ##airlineID and locationID are foreign keys, so must be in airline and location tables respectively
 ##tail_number is a primary key attribute and cannot be null
 ##seat_capacity and speed must both be non-null and positive
-if (ip_airlineID in (select airlineID from airline) and ip_tail_number != null and ip_seat_capacity != null 
-and ip_seat_capacity > 0 and ip_speed != null and ip_speed > 0 
-and ip_locationID in (select locationID from location)) THEN
+if (ISNULL(ip_airlineID) = 0 and ip_airlineID in 
+(select airlineID from airline) and ISNULL(ip_tail_num) = 0 and (ip_airlineID, ip_tail_num) not in 
+(select airlineID, tail_num from airplane) 
+and ISNULL(ip_locationID) = 0 and ip_locationID not in (select locationID from location)
+and ISNULL(ip_seat_capacity) = 0 and ISNULL(ip_speed) = 0 and ip_seat_capacity > 0 and ip_speed > 0) THEN
+insert into location values(ip_locationID);
 insert into airplane values(ip_airlineID, ip_tail_num, ip_seat_capacity, 
 ip_speed, ip_locationID, ip_plane_type, ip_skids,ip_propellers, ip_jet_engines);
 END IF;
@@ -78,8 +81,10 @@ delimiter //
 create procedure add_airport (in ip_airportID char(3), in ip_airport_name varchar(200),
     in ip_city varchar(100), in ip_state varchar(100), in ip_country char(3), in ip_locationID varchar(50))
 sp_main: begin
-if (ip_airportID != null and ip_city != null and 
-ip_state != null and ip_country != null and ip_location in (select locationID from location)) then
+if (isnull(ip_airportID) = 0 and ip_airportID not in (select airportID from airport) 
+and isnull(ip_city) = 0 and isnull(ip_state) = 0 and isnull(ip_country) = 0 
+and isnull(ip_locationID) = 0 and ip_locationID not in (select locationID from location)) then
+insert into location values(ip_locationID);
 insert into airport values(ip_airportID, ip_airport_name, ip_city, ip_state, ip_country, ip_locationID);
 end if;
 end //
@@ -103,10 +108,11 @@ create procedure add_person (in ip_personID varchar(50), in ip_first_name varcha
     in ip_last_name varchar(100), in ip_locationID varchar(50), in ip_taxID varchar(50),
     in ip_experience integer, in ip_miles integer, in ip_funds integer)
 sp_main: begin
-if(ip_first_name != null and ip_personID != null and ip_locationID in (select locationID from location)) then
+if(isnull(ip_first_name) = 0 and isnull(ip_personID) = 0 and ip_personID not in (select personID from person) 
+and ip_locationID in (select locationID from location)) then
 insert into person values(ip_personID, ip_first_name, ip_last_name, ip_locationID);
-if(ip_taxID != null) then #checks if the person is a pilot
-insert into pilot values (ip_personID, ip_taxID, ip_experience, null, ip_personID);
+if(isnull(ip_taxID) = 0) then #checks if the person is a pilot
+insert into pilot values (ip_personID, ip_taxID, ip_experience, null);
 else #if not a pilot, is a passenger
 insert into passenger values (ip_personID, ip_miles, ip_funds);
 end if;
@@ -124,11 +130,12 @@ drop procedure if exists grant_or_revoke_pilot_license;
 delimiter //
 create procedure grant_or_revoke_pilot_license (in ip_personID varchar(50), in ip_license varchar(100))
 sp_main: begin
-IF (select count(*) from pilot_licenses where personID = ip_personID and license = ip_license > 0)
-THEN
-DELETE from pilot_licenses where value = (ip_personID, ip_license);
+IF (isnull(ip_personID) = 0 and isnull(ip_license) = 0 and ip_personID in (select personID from pilot)) THEN
+IF ((ip_personID, ip_license) in (select * from pilot_licenses))THEN
+DELETE from pilot_licenses where (personID, license) = (ip_personID, ip_license);
 ELSE
-insert into pilot_licenses value(ip_personID, ip_license);
+insert into pilot_licenses values(ip_personID, ip_license);
+END IF;
 END IF;
 end //
 delimiter ;
@@ -178,6 +185,7 @@ insert into flight values (ip_flightID, ip_routeID, ip_support_airline, ip_suppo
 end //
 delimiter ;
 
+
 -- [6] flight_landing()
 -- -----------------------------------------------------------------------------
 /* This stored procedure updates the state for a flight landing at the next airport
@@ -191,24 +199,33 @@ delimiter //
 create procedure flight_landing (in ip_flightID varchar(50))
 sp_main: begin
 
-DECLARE dist integer DEFAULT 0;
+DECLARE dist integer DEFAULT 0; # The distance of the leg just travelled. Used to reward FFM to passengers. 
+DECLARE pos integer DEFAULT 0; #The leg sequence # most recently travelled
 
-update flight 
-set next_time = next_time.hours + 1, airplane_status = 'on_ground'
+if(isnull(ip_flightID) = 0 and ip_flightID in (select flightID from flight) and
+(select airplane_status from flight where flightID = ip_flightID) = 'in_flight') 
+then #makes sure flight exists and is in the air
+update flight #updates the attributes about the flight that need to be updated
+set next_time = MOD(next_time + 10000, 240000), airplane_status = 'on_ground'
 where flightID = ip_flightID;
 
 update pilot
 set experience = experience + 1
 where commanding_flight = ip_flightID;
 
+set pos = (select progress from flight where flightID = ip_flightID);
 set dist = (select distance from leg where leg.legID in (select legID from route_path
-where route_id in (select route_id from flight where flightID = ip_flightID)));
+where routeID in (select routeID from flight where flightID = ip_flightID) and sequence = pos));
 
-update (passenger join person on passenger.personID = person.personID)
-set miles = miles + 0
-where flightID = ip_flightID;
+update passenger
+set miles = miles + dist
+where personID in (select personID from person where locationID in 
+(select locationID from airplane where tail_num in 
+(select support_tail from flight where flightID = ip_flightID)));
+end if;
 end //
 delimiter ;
+
 
 -- [7] flight_takeoff()
 -- -----------------------------------------------------------------------------
