@@ -332,17 +332,34 @@ drop procedure if exists assign_pilot;
 delimiter //
 create procedure assign_pilot (in ip_flightID varchar(50), ip_personID varchar(50))
 sp_main: begin
-DECLARE plane varchar(50); # the tail_num of the plane operating the flight
+DECLARE ploc varchar(50); # the locationID of the plane operating the flight
 DECLARE ptype varchar(100); #propeller or jet
+DECLARE port varchar(50);
+DECLARE route varchar(50);
 
 
-set plane = (select tail_num from airplane where (airlineID, tail_num) in 
+set ploc = (select locationID from airplane where (airlineID, tail_num) in 
 (select support_airline, support_tail from flight where flightID = ip_flightID));
-set ptype = (select plane_type from airplane where tail_num = plane);
-if (ip_personID in (select personID from pilot) and (ip_personID, ptype) in (select * from pilot_licenses)) then
-if ((select locationID from person where personID = ip_personID) not like '%plane%') then
+set ptype = (select plane_type from airplane where locationID = ploc);
+set route = (select routeID from flight where flightID = ip_flightID);
+
+if (ip_personID in (select personID from pilot) and (ip_personID, concat(ptype, 's')) in (select * from pilot_licenses)
+and (select airplane_status from flight where flightID = ip_flightID) = 'on_ground') then
+
+#Gets the current airport the plane is at
+IF ((select progress from flight where flightID = ip_flightID) = 0) THEN 
+set port = (select locationID from airport where airportID in (select departure from leg where legID in (
+select legID from route_path where routeID = route and 1 = sequence)));
+ELSE 
+set port = (select locationID from airport where airportID in (select arrival from leg where legID in (
+select legID from route_path where routeID = route and 
+(select progress from flight where flightID = ip_flightID) = sequence)));
+END IF; 
+
+
+if ((select locationID from person where personID = ip_personID) = port) then
 update person 
-set locationID = (select locationID from airplane where tail_num = plane)
+set locationID = ploc
 where personID = ip_personID;
 end if;
 end if;
