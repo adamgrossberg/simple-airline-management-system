@@ -684,7 +684,20 @@ group by l.departure, l.arrival;
 -- -----------------------------------------------------------------------------
 create or replace view people_on_the_ground (departing_from, airport, airport_name,
 	city, state, country, num_pilots, num_passengers, joint_pilots_passengers, person_list) as
-select '_', '_', '_', '_', '_', '_', '_', '_', '_', '_';
+select 
+a.airportID as departing_from,
+a.locationID as airport,
+a.airport_name,
+a.city,
+a.state,
+a.country,
+(select COUNT(*) from person p1 where p1.locationID = a.locationID and p1.personID in
+	(select personID from pilot)) as num_pilots,
+(select COUNT(*) from person p2 where p2.locationID = a.locationID and p2.personID in
+	(select personID from passenger)) as num_passengers,
+COUNT(*) as joint_pilots_passengers, 
+group_concat(p.personID) as person_list 
+from person p join airport a on p.locationID = a.locationID group by a.airportID;
 
 -- [18] route_summary()
 -- -----------------------------------------------------------------------------
