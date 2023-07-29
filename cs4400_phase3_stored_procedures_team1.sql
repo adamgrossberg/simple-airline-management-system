@@ -453,16 +453,15 @@ sp_main: begin
 DECLARE start varchar(50); #The airportID of the start airport
 DECLARE end varchar(50); #The airportID of the end airport
 DECLARE ploc varchar(50); #The locationID of the airplane
-DECLARE plane varchar(50); #The tail_num of the airplane
+DECLARE port varchar(50); #the locationID of the airport currently at
 DECLARE route varchar(50); #The routeID of the flight
 DECLARE numLegs int default 0;
 
 ## MAKES SURE FLIGHT IS GROUNDED BEFORE RUNNING ANYTHING
-if((select airplane_status from flight where flightID = ip_flightID) like 'on_ground') THEN #OUTER LOOP 1
+if((select airplane_status from flight where flightID = ip_flightID) = 'on_ground') THEN #OUTER LOOP 1
 #Gets the plane and plane location values stored
-set plane = (select tail_num from airplane where (airlineID, tail_num) in 
+set ploc = (select locationID from airplane where (airlineID, tail_num) in 
 (select support_airline, support_tail from flight where flightID = ip_flightID));
-set ploc = (select locationID from airplane where tail_num = plane);
 
 
 ##MAKES SURE AIRPLANE IS EMPTY BEFORE RUNNING ANYTHING
@@ -479,8 +478,20 @@ set end = (select airportID from airport where airportID in (
 select arrival from leg where legID in(
 select legID from route_path where routeID = route and sequence = numLegs #Gets the last leg of the sequence
 )));
+
+#Gets the locationID for the current airport
+IF ((select progress from flight where flightID = ip_flightID) = 0) THEN 
+set port = (select locationID from airport where airportID in (select departure from leg where legID in (
+select legID from route_path where routeID = route and 1 = sequence)));
+ELSE 
+set port = (select locationID from airport where airportID in (select arrival from leg where legID in (
+select legID from route_path where routeID = route and 
+(select progress from flight where flightID = ip_flightID) = sequence)));
+END IF; 
+
+
 # Makes sure the airport is at either the start or the end of the route
-IF ((select airportID from airport where locationID = ploc) in (start, end)) THEN #OUTER LOOP 3
+IF ((select airportID from airport where locationID = port) in (start, end)) THEN #OUTER LOOP 3
 delete from flight where flightID = ip_flightID; #Deletes the flight
 END IF; ##OUTER LOOP 3
 END IF; ##OUTER LOOP 2
