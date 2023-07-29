@@ -453,6 +453,86 @@ delimiter //
 create procedure simulation_cycle ()
 sp_main: begin
 
+	DECLARE currentFlightID VARCHAR(50);
+  DECLARE currentLegID VARCHAR(50);
+  DECLARE currentProgress INT;
+  DECLARE nextLegID VARCHAR(50);
+  DECLARE nextTime TIME;
+  DECLARE isLandingFlight BOOLEAN;
+  
+  -- Find the next flight to simulate (the one with the smallest next_time)
+  SELECT flightID, progress, next_time, legID, 
+         IF(airplane_status = 'in_flight', 1, 0) AS is_landing_flight
+  INTO currentFlightID, currentProgress, nextTime, currentLegID, isLandingFlight
+  FROM flight
+  ORDER BY nextTime, isLandingFlight DESC, flightID
+  LIMIT 1;
+  
+  -- Check if there's a flight to simulate
+  WHILE currentFlightID IS NOT NULL DO
+    -- If an airplane is in_flight and waiting to land
+    IF currentProgress > 0 AND currentLegID IS NOT NULL AND currentTime < nextTime THEN
+      SET currentTime = nextTime;
+    END IF;
+    
+    -- If an airplane is in_flight and ready to reach the destination
+    IF currentProgress > 0 AND currentLegID IS NOT NULL AND currentTime >= nextTime THEN
+      UPDATE flight
+      SET progress = currentProgress + 1,
+          next_time = NULL
+      WHERE flightID = currentFlightID;
+    END IF;
+    
+    -- If an airplane is on_ground and waiting to takeoff
+    IF currentProgress = 0 AND currentLegID IS NULL AND currentTime < nextTime THEN
+      SET currentTime = nextTime;
+    END IF;
+    
+    -- If an airplane is on_ground and ready to takeoff
+    IF currentProgress = 0 AND currentLegID IS NULL AND currentTime >= nextTime THEN
+      -- Get the next leg in the route, if any
+      SELECT legID
+      INTO nextLegID
+      FROM route_path
+      WHERE routeID = (SELECT routeID FROM flight WHERE flightID = currentFlightID)
+      AND sequence = 1;
+      
+      IF nextLegID IS NOT NULL THEN
+        -- Calculate the time needed for the next leg based on leg distance and airplane speed
+        SELECT leg_distance / airplane_speed INTO @time_needed
+        FROM leg
+        JOIN airplane ON leg.airlineID = airplane.airlineID
+        WHERE legID = nextLegID AND airplane.tail_num = (SELECT support_tail FROM flight WHERE flightID = currentFlightID);
+        
+        SET nextTime = ADDTIME(currentTime, @time_needed);
+        UPDATE flight
+        SET progress = 1,
+            next_time = nextTime
+        WHERE flightID = currentFlightID;
+      ELSE
+        -- If an airplane is on_ground and has reached the end of its route
+        -- Update airplane crew and retire the flight
+        UPDATE flight
+        SET progress = -1, -- Marking as retired
+            next_time = NULL
+        WHERE flightID = currentFlightID;
+        
+        UPDATE airplane
+        SET locationID = NULL -- Removing the airplane from the system
+        WHERE airlineID = (SELECT support_airline FROM flight WHERE flightID = currentFlightID)
+        AND tail_num = (SELECT support_tail FROM flight WHERE flightID = currentFlightID);
+      END IF;
+    END IF;
+    
+    -- Find the next flight to simulate (the one with the smallest next_time)
+    SELECT flightID, progress, next_time, legID, 
+           IF(airplane_status = 'in_flight', 1, 0) AS is_landing_flight
+    INTO currentFlightID, currentProgress, nextTime, currentLegID, isLandingFlight
+    FROM flight
+    WHERE progress >= 0 -- Exclude retired flights
+    ORDER BY nextTime, isLandingFlight DESC, flightID
+    LIMIT 1;
+  END WHILE;
 end //
 delimiter ;
 
