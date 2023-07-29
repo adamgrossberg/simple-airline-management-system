@@ -155,8 +155,7 @@ create procedure offer_flight (in ip_flightID varchar(50), in ip_routeID varchar
     in ip_support_airline varchar(50), in ip_support_tail varchar(50), in ip_progress integer,
     in ip_airplane_status varchar(100), in ip_next_time time, in ip_cost integer)
 sp_main: begin
-<<<<<<< Updated upstream
-=======
+
 IF (ip_routeID not in (select routeID from route)) 
 	then leave sp_main; END if; -- Valid route checking
     
@@ -183,7 +182,7 @@ if (ip_flightID in (select flightID from flight)) then
     
 insert into flight values (ip_flightID, ip_routeID, ip_support_airline, ip_support_tail, ip_progress, 
 	ip_airplane_status, ip_next_time, ip_cost);
->>>>>>> Stashed changes
+
 
 end //
 delimiter ;
@@ -247,12 +246,7 @@ sp_main: begin
 declare legTime datetime default '00:00:00';
 declare numpilots integer default 0;
 # Krishnav make sure to increase progress by 1 here. I don't do it in flight_landing
-<<<<<<< Updated upstream
-set distance = 5;
-set speedvar = (select speed from airplane where );
 
-=======
--- set speedvar
 
 IF (Select plane_type from airplane where tail_num = 
 	(select support_tail from flight where flightID = ip_flightID) = 'prop') then set numpilots = 1;
@@ -274,12 +268,11 @@ IF (Select count(*) from pilot where commanding_flight = ip_flightID) != numpilo
     progress = progress + 1,
     next_time = addtime(next_time, legTime) 
     where flightID = ip_flightID;
->>>>>>> Stashed changes
 
 end //
 delimiter ;
 
-call flight_takeoff('dl_10');
+
 
 -- [8] passengers_board()
 -- -----------------------------------------------------------------------------
@@ -662,7 +655,17 @@ and sequence = progress)));
 -- -----------------------------------------------------------------------------
 create or replace view flights_on_the_ground (departing_from, num_flights,
 	flight_list, earliest_arrival, latest_arrival, airplane_list) as 
-select '_', '_', '_', '_', '_', '_';
+	
+select l.departure as departing_from,
+	count(f.flightID) as num_flights,
+    group_concat(f.flightID order by f.flightID asc separator ',') flight_list,
+    min(f.next_time) as earlies_arrival,
+    max(f.next_time) as latest_arrival,
+    group_concat(distinct concat(a.locationID) order by f.flightID asc separator ',') as airplane_list
+    from flight f join route_path rp on f.routeID = rp.routeID and f.progress = rp.sequence
+    join leg l on rp.legID = l.legID left join airplane a on f.support_airline = a.airlineID and f.support_tail = a.tail_num
+    where airplane_status = 'on_ground'
+    group by l.departure, l.arrival;
 
 -- [16] people_in_the_air()
 -- -----------------------------------------------------------------------------
