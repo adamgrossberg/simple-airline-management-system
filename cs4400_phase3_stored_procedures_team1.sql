@@ -429,7 +429,14 @@ drop procedure if exists recycle_crew;
 delimiter //
 create procedure recycle_crew (in ip_flightID varchar(50))
 sp_main: begin
-
+if ip_flightID is null then leave sp_main; end if;
+#Check that the plane is empty
+set onboard = (select count(*) from person where personID in #Computes the number of people currently on the plane
+(select personID from passenger) and locationID = ploc);
+if onboard = 0 and ((select airportID from airport where locationID = ploc) in (end)) then
+#Remove Pilots
+delete commanding_flight from pilot where commanding_flight like ip_flightID;
+end if;
 end //
 delimiter ;
 
