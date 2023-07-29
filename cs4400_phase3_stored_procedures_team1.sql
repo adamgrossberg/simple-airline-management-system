@@ -266,41 +266,32 @@ END IF;
 set onboard = (select count(*) from person where personID in #Computes the number of people currently on the plane
 (select personID from passenger) and locationID = ploc);
 
-# Gets a list of all other flights currently at the same airport. Still have to implement. 
-#select flightID from flight where flightID != ip_flightID and (select locationID from airport where airportID in 
-#(select departure from leg where legID in (select legID from route_path where routeID in 
-#(select routeID from flight where flightID != ip_flightID) and sequence =
- #(select progress from flight where progress = 0)))
- #union (select arrival from leg where legID in (select legID from route_path where routeID in 
-#(select routeID from flight where flightID != ip_flightID) and sequence =
- #(select progress from flight where progress > 0)))
- #) = port;
 
-# Uses above list to create a list of alternate airports offered by other flights. Still have to implement. 
-
-
-# Counts the number of potential passengers. Checks if a destination offered by another flight is better (have to impelment)
+# Counts the number of potential passengers. 
 set cap = (select count(*) from passenger_vacations where personID in 
 (select personID from person where locationID = port) #finds all the people currently at the right airport
-#checks if their destination is one of the stops
+#checks if their preferred destination is one of the stops
 and airportID in (select airportID from airport where airportID in( 
 select arrival from leg where legID in 
-(select legID from route_path where routeID = route and sequence > prog))));
+(select legID from route_path where routeID = route and sequence > prog))) and sequence = 1 
+and personID in (select personID from passenger where funds >= (select cost from flight where flightID = ip_flightID)));
 # Makes sure that people can actually board the plane
 IF (cap + onboard <= (select seat_capacity from airplane where locationID = ploc) and cap > 0) THEN #OUTER LOOP 3
 
 
 update person
 set locationID = ploc
-where personID in (select personID from passenger_vacations where airportID in (
+where personID in (select personID from passenger_vacations where (airportID in (
 select airportID from airport where airportID in(select arrival from leg where legID in 
-(select legID from route_path where routeID = route and sequence > prog)))) and locationID = port;
+(select legID from route_path where routeID = route and sequence > prog))) and sequence = 1)) and locationID = port
+and personID in (select personID from passenger where funds >= (select cost from flight where flightID = ip_flightID));
 
 END IF; ##OUTER LOOP 3
 END IF; ##OUTER LOOP 2
 END IF; ##OUTER LOOP 1
 end //
 delimiter ;
+
 
 -- [9] passengers_disembark()
 -- -----------------------------------------------------------------------------
