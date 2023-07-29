@@ -366,11 +366,46 @@ drop procedure if exists passengers_disembark;
 delimiter //
 create procedure passengers_disembark (in ip_flightID varchar(50))
 sp_main: begin
-declare arrivalAirport varchar(50);
-if ip_flightID is null then leave sp_main; end if;
-if ip_flightID not in (select flight_ID from flight) then leave sp_main; end if;
+declare airportName varchar(50);
+declare airportLocation varchar(50);
+declare airplaneLocation varchar(50);
+IF ip_flightID is null or 
+	(select airplane_status from flight where ip_flightID = flightID) = 'in_flight' then 
+		leave sp_main; END if; -- Checking flight status
+        
+select l.departure into airportName from flight f join route_path on f.routeID = route_path.routeID
+	join leg l on route_path.legID = l.legID where flightID = ip_flightID and progress = sequence; -- Checking airport name
+    
+select locationID into airportLocation from flight f join route_path on f.routeID = route_path.routeID 
+    join leg l on route_path.legID = l.legID join airport on departure = airportID
+		where flightID = ip_flightID and progress = sequence; -- Checking location
+
+select airplane.locationID into airplaneLocation from flight left join airplane on support_airline = airlineID 
+	and support_tail = tail_num where flightID = ip_flightID;
+    
+update passenger join passenger_vacations on passenger.personID = passenger_vacations.personID
+    join person on person.personID = passenger.personID set person.locationID = airportLocation
+		where person.locationID = airplaneLocation and passenger.personID in 
+			(select personID from passenger_vacations where passenger_vacations.airportID = airportName and sequence = 1);
+
+    delete from passenger_vacations 
+    where airportID = airportName and sequence = 1 and personID in (select personID from person where locationID = airportLocation);
+
+    DROP TEMPORARY TABLE IF EXISTS temp_sequence_update;
 
 
+    CREATE TEMPORARY table temp_sequence_update
+    
+    SELECT personID, 
+        ROW_NUMBER() OVER (PARTITION BY personID ORDER BY sequence) as new_sequence
+    FROM passenger_vacations;
+
+    UPDATE passenger_vacations 
+    JOIN temp_sequence_update ON passenger_vacations.personID = temp_sequence_update.personID AND passenger_vacations.sequence = temp_sequence_update.new_sequence
+    SET passenger_vacations.sequence = temp_sequence_update.new_sequence;
+
+    -- Drop temporary table
+    DROP TEMPORARY TABLE temp_sequence_update;
 end //
 delimiter ;
 
