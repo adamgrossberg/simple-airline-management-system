@@ -673,4 +673,8 @@ from route_path rp join leg l on rp.legID = l.legID left join flight f on rp.rou
 -- -----------------------------------------------------------------------------
 create or replace view alternative_airports (city, state, country, num_airports,
 	airport_code_list, airport_name_list) as
-select '_', '_', '_', '_', '_', '_';
+select city, state, country, count(distinct aiportID) as "num_airports",
+group_concat(distinct concat(airportID) order by airportID asc separator ',') as "airport_code_list", 
+group_concat(distinct concat(airport_name) order by airport_name asc separator ',') as "airport_name_list"
+from airport
+group by city, state, country;
