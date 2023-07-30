@@ -260,10 +260,10 @@ IF (planeType = 'prop') then set numpilots = 1;
 		ELSE set numpilots = 2; END if;
 IF ((Select count(*) from pilot where commanding_flight = ip_flightID) < numpilots) then
 	update flight
-    set next_time = MOD(next_time + 3000, 240000)
+    set next_time = addtime(next_time, '30:00')
     where flightID = ip_flightID;
     leave sp_main; END if;
-    
+
     set legTime = leg_time((select distance from leg where legID in
 		(select legID from route_path where (routeID, sequence - 1) in
         (select routeID, progress from flight where flightID = ip_flightID))),

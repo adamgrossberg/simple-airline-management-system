@@ -1,3 +1,4 @@
+use flight_tracking;
 select * from airplane;
 
 -- [1] add_airplane()
@@ -67,7 +68,7 @@ call flight_takeoff('');
 call flight_takeoff(null);
 call flight_takeoff('oh_99');
 call flight_takeoff('dl_10');
-call flight_takeoff('ba_51');
+-- call flight_takeoff('ba_51');
 
 -- [8] passengers_board()
 call passengers_board('ba_61');
@@ -105,7 +106,7 @@ call retire_flight('am_99');
 
 -- [13] simulation_cycle()
 call simulation_cycle();
-
+call simulation_cycle();
 select * from flight;
 select * from airplane;
 select * from airline;
