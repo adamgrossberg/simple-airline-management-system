@@ -564,19 +564,19 @@ sp_main: begin
   
   -- Find the next flight to simulate (the one with the smallest next_time)
   SELECT flightID, progress, next_time, 
-         IF(airplane_status = 'in_flight', 1, 0) AS is_landing_flight
+         IF(airplane_status = 'in_flight', 1, 0) AS "is_landing_flight"
   INTO currentFlightID, currentProgress, nextTime, isLandingFlight
   FROM flight
   ORDER BY nextTime, isLandingFlight DESC, flightID
   LIMIT 1;
-  
+
 	if(isnull(currentFlightID) = 0) then
     -- If an airplane is in_flight and waiting to land
-	if(is_landing_flight) then
+	if(isLandingFlight) then
     call flight_landing(currentFlightID);
     call passengers_disembark(currentFlightID);
     -- If an airplane is on_ground and waiting to takeoff
-    else if(is_landing_flight and currentProgress < 
+    else if(isLandingFlight and currentProgress < 
     (select count(sequence) from route_path where routeID = 
     (select routeID from flight where flightID = currentFlightID))) then
     call passengers_board(currentFlightID);
@@ -685,7 +685,7 @@ from route_path rp join leg l on rp.legID = l.legID left join flight f on rp.rou
 -- -----------------------------------------------------------------------------
 create or replace view alternative_airports (city, state, country, num_airports,
 	airport_code_list, airport_name_list) as
-select city, state, country, count(distinct aiportID) as "num_airports",
+select city, state, country, count(distinct airportID) as "num_airports",
 group_concat(distinct concat(airportID) order by airportID asc separator ',') as "airport_code_list", 
 group_concat(distinct concat(airport_name) order by airport_name asc separator ',') as "airport_name_list"
 from airport
