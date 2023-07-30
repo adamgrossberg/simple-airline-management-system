@@ -612,7 +612,7 @@ select l.departure as departing_from,
     group_concat(distinct concat(a.locationID) order by f.flightID asc separator ',') as airplane_list
     from flight f join route_path rp on f.routeID = rp.routeID and f.progress = rp.sequence
     join leg l on rp.legID = l.legID left join airplane a on f.support_airline = a.airlineID and f.support_tail = a.tail_num
-    where airplane_status = 'on_ground'
+    where f.airplane_status = 'on_ground'
     group by l.departure, l.arrival;
 
 -- [16] people_in_the_air()
