@@ -448,16 +448,21 @@ drop procedure if exists recycle_crew;
 delimiter //
 create procedure recycle_crew (in ip_flightID varchar(50))
 sp_main: begin
+declare onboard int default 0;
 if ip_flightID is null then leave sp_main; end if;
 #Check that the plane is empty
 set onboard = (select count(*) from person where personID in #Computes the number of people currently on the plane
 (select personID from passenger) and locationID = ploc);
 if onboard = 0 and ((select airportID from airport where locationID = ploc) in (end)) then
 #Remove Pilots
-delete commanding_flight from pilot where commanding_flight like ip_flightID;
+update pilot
+set commanding_flight = null
+where commanding_flight = ip_flightID;
 end if;
 end //
+
 delimiter ;
+
 
 -- [12] retire_flight()
 -- -----------------------------------------------------------------------------
@@ -543,75 +548,37 @@ delimiter //
 create procedure simulation_cycle ()
 sp_main: begin
 
-DECLARE currentFlightID VARCHAR(50);
-  DECLARE currentLegID VARCHAR(50);
+  DECLARE currentFlightID VARCHAR(50);
   DECLARE currentProgress INT;
-  DECLARE nextLegID VARCHAR(50);
   DECLARE nextTime TIME;
   DECLARE isLandingFlight BOOLEAN;
   
   -- Find the next flight to simulate (the one with the smallest next_time)
-  SELECT flightID, progress, next_time, legID, 
+  SELECT flightID, progress, next_time, 
          IF(airplane_status = 'in_flight', 1, 0) AS is_landing_flight
-  INTO currentFlightID, currentProgress, nextTime, currentLegID, isLandingFlight
+  INTO currentFlightID, currentProgress, nextTime, isLandingFlight
   FROM flight
   ORDER BY nextTime, isLandingFlight DESC, flightID
   LIMIT 1;
   
-  -- Check if there's a flight to simulate
-  WHILE currentFlightID IS NOT NULL DO
-	execute land_flight;
-    
-    -- If an airplane is in_flight and ready to reach the destination
-    IF currentProgress > 0 AND currentLegID IS NOT NULL THEN
-      UPDATE flight
-      SET progress = currentProgress + 1,
-          next_time = NULL
-      WHERE flightID = currentFlightID;
-    END IF;
-    
-    -- If an airplane is in the air and waiting to land
-    If airplane_status = 'in_flight' AND currentLegID IS NULL THEN
-		execute flight_land;
-		execute passengers_disembark;
-    
-    -- If an airplane is on_ground and ready to takeoff
-    IF airplane_status = 'on_ground' AND currentLegID IS NULL THEN
-      -- Get the next leg in the route, if any
-      SELECT legID
-      INTO nextLegID
-      FROM route_path
-      WHERE routeID = (SELECT routeID FROM flight WHERE flightID = currentFlightID)
-      AND sequence like (select sequence from route_path where sequence + 1);
-      
-      IF nextLegID IS NOT NULL THEN
-        -- Calculate the time needed for the next leg based on leg distance and airplane speed
-        execute leg_time;
-      ELSE
-        -- If an airplane is on_ground and has reached the end of its route
-        -- Update airplane crew and retire the flight
-        if airplane_status = 'on_ground' then
-			execute recycle_crew;
-			execute retire_flight;
-			end if;
-		end if;
-        
-        UPDATE airplane
-        SET locationID = NULL -- Removing the airplane from the system
-        WHERE airlineID = (SELECT support_airline FROM flight WHERE flightID = currentFlightID)
-        AND tail_num = (SELECT support_tail FROM flight WHERE flightID = currentFlightID);
-      END IF;
-    END IF;
-    
-    -- Find the next flight to simulate (the one with the smallest next_time)
-    SELECT flightID, progress, next_time, legID, 
-           IF(airplane_status = 'in_flight', 1, 0) AS is_landing_flight
-    INTO currentFlightID, currentProgress, nextTime, currentLegID, isLandingFlight
-    FROM flight
-    WHERE progress >= 0 -- Exclude retired flights
-    ORDER BY nextTime, isLandingFlight DESC, flightID
-    LIMIT 1;
-  END WHILE;
+	if(isnull(currentFlightID) = 0) then
+    -- If an airplane is in_flight and waiting to land
+	if(is_landing_flight) then
+    call flight_landing(currentFlightID);
+    call passengers_disembark(currentFlightID);
+    -- If an airplane is on_ground and waiting to takeoff
+    else if(is_landing_flight and currentProgress < 
+    (select count(sequence) from route_path where routeID = 
+    (select routeID from flight where flightID = currentFlightID))) then
+    call passengers_board(currentFlightID);
+    call flight_takeoff(currentFlightID);
+    -- If a flight is at the end of its route
+    else
+    call recycle_crew(currentFlightID);
+    call retire_flight(currentFlightID);
+    end if;
+    end if;
+    end if;
 end //
 delimiter ;
 
