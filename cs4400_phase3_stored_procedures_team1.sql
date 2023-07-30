@@ -452,17 +452,28 @@ delimiter;
 /* This stored procedure releases the assignments for a given flight crew.  The
 flight must have ended, and all passengers must have disembarked. */
 -- -----------------------------------------------------------------------------
-drop procedure if exists recycle_crew;
+drop procedure if exists recycle_crew; #For some reason, there are issues with this statement. Do not know why. 
 delimiter //
 create procedure recycle_crew (in ip_flightID varchar(50))
 sp_main: begin
+
 declare onboard int default 0;
 DECLARE ploc varchar(50);
-declare end varchar(50);
+Declare route varchar(50);
+
 if ip_flightID is null then leave sp_main; end if;
+if (select airplane_status from flight where flightID = ip_flightID) = 'in_flight' then leave sp_main; end if;
+#Initiailzes the variables
+set ploc = (select locationID from airplane where (airlineID, tail_num) in 
+(select support_airline, support_tail from flight where flightID = ip_flightID));
+if ploc is null then leave sp_main; end if;
+
+set route = (select routeID from flight where flightID = ip_flightID);
+if (select progress from flight where flightID = ip_flightID) != (select max(sequence) from route_path where routeID = route)
+then leave sp_main; end if;
 #Check that the plane is empty
-set onboard =  (select count(*) from person where locationID = ploc);
-if onboard = 0 and ((select airportID from airport where locationID = ploc) in (end)) then
+set onboard = (select count(*) from person where locationID = ploc and personID not in (select personID from pilot));
+if onboard = 0 then
 #Remove Pilots
 update pilot
 set commanding_flight = null
@@ -471,6 +482,7 @@ end if;
 end //
 
 delimiter ;
+
 
 
 -- [12] retire_flight()
