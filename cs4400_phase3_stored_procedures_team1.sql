@@ -255,7 +255,7 @@ where routeID = (select routeID from flight where flightID = ip_flightID)))
 Then leave sp_main; end if;
 
 set planeType = (Select plane_type from airplane where (airlineID, tail_num) in  
-	(select support_airline, support_tail from flight where flightID = 'lf_20'));
+	(select support_airline, support_tail from flight where flightID = ip_flightID));
 IF (planeType = 'prop') then set numpilots = 1;
 		ELSE set numpilots = 2; END if;
 IF ((Select count(*) from pilot where commanding_flight = ip_flightID) < numpilots) then
