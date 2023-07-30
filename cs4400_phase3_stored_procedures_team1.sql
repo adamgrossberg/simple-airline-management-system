@@ -379,11 +379,11 @@ update passenger join passenger_vacations on passenger.personID = passenger_vaca
 		where person.locationID = airplaneLocation and passenger.personID in 
 			(select personID from passenger_vacations where passenger_vacations.airportID = airportName and sequence = 1);
 
+
     delete from passenger_vacations 
     where airportID = airportName and sequence = 1 and personID in (select personID from person where locationID = airportLocation);
 
     DROP TEMPORARY TABLE IF EXISTS temp_sequence_update;
-
 
     CREATE TEMPORARY table temp_sequence_update
     
@@ -452,17 +452,28 @@ delimiter;
 /* This stored procedure releases the assignments for a given flight crew.  The
 flight must have ended, and all passengers must have disembarked. */
 -- -----------------------------------------------------------------------------
-drop procedure if exists recycle_crew;
+drop procedure if exists recycle_crew; #For some reason, there are issues with this statement. Do not know why. 
 delimiter //
 create procedure recycle_crew (in ip_flightID varchar(50))
 sp_main: begin
+
 declare onboard int default 0;
 DECLARE ploc varchar(50);
-declare end varchar(50);
+Declare route varchar(50);
+
 if ip_flightID is null then leave sp_main; end if;
+if (select airplane_status from flight where flightID = ip_flightID) = 'in_flight' then leave sp_main; end if;
+#Initiailzes the variables
+set ploc = (select locationID from airplane where (airlineID, tail_num) in 
+(select support_airline, support_tail from flight where flightID = ip_flightID));
+if ploc is null then leave sp_main; end if;
+
+set route = (select routeID from flight where flightID = ip_flightID);
+if (select progress from flight where flightID = ip_flightID) != (select max(sequence) from route_path where routeID = route)
+then leave sp_main; end if;
 #Check that the plane is empty
-set onboard =  (select count(*) from person where locationID = ploc);
-if onboard = 0 and ((select airportID from airport where locationID = ploc) in (end)) then
+set onboard = (select count(*) from person where locationID = ploc and personID not in (select personID from pilot));
+if onboard = 0 then
 #Remove Pilots
 update pilot
 set commanding_flight = null
@@ -471,7 +482,6 @@ end if;
 end //
 
 delimiter ;
-
 
 -- [12] retire_flight()
 -- -----------------------------------------------------------------------------
@@ -560,23 +570,23 @@ sp_main: begin
   DECLARE currentFlightID VARCHAR(50);
   DECLARE currentProgress INT;
   DECLARE nextTime TIME;
-  DECLARE isLandingFlight BOOLEAN;
+  DECLARE isLandingFlight VARCHAR(50);
   
   -- Find the next flight to simulate (the one with the smallest next_time)
   SELECT flightID, progress, next_time, 
-         IF(airplane_status = 'in_flight', 1, 0) AS "is_landing_flight"
+         airplane_status
   INTO currentFlightID, currentProgress, nextTime, isLandingFlight
   FROM flight
-  ORDER BY nextTime, isLandingFlight DESC, flightID
+  ORDER BY next_time, airplane_status, flightID
   LIMIT 1;
 
 	if(isnull(currentFlightID) = 0) then
     -- If an airplane is in_flight and waiting to land
-	if(isLandingFlight) then
+	if(isLandingFlight = 'in_flight') then
     call flight_landing(currentFlightID);
     call passengers_disembark(currentFlightID);
     -- If an airplane is on_ground and waiting to takeoff
-    else if(isLandingFlight and currentProgress < 
+    else if(isLandingFlight = 'on_ground' and currentProgress < 
     (select count(sequence) from route_path where routeID = 
     (select routeID from flight where flightID = currentFlightID))) then
     call passengers_board(currentFlightID);
