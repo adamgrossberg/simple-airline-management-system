@@ -543,7 +543,7 @@ delimiter //
 create procedure simulation_cycle ()
 sp_main: begin
 
-	DECLARE currentFlightID VARCHAR(50);
+DECLARE currentFlightID VARCHAR(50);
   DECLARE currentLegID VARCHAR(50);
   DECLARE currentProgress INT;
   DECLARE nextLegID VARCHAR(50);
@@ -560,52 +560,41 @@ sp_main: begin
   
   -- Check if there's a flight to simulate
   WHILE currentFlightID IS NOT NULL DO
-    -- If an airplane is in_flight and waiting to land
-    IF currentProgress > 0 AND currentLegID IS NOT NULL AND currentTime < nextTime THEN
-      SET currentTime = nextTime;
-    END IF;
+	execute land_flight;
     
     -- If an airplane is in_flight and ready to reach the destination
-    IF currentProgress > 0 AND currentLegID IS NOT NULL AND currentTime >= nextTime THEN
+    IF currentProgress > 0 AND currentLegID IS NOT NULL THEN
       UPDATE flight
       SET progress = currentProgress + 1,
           next_time = NULL
       WHERE flightID = currentFlightID;
     END IF;
     
-    -- If an airplane is on_ground and waiting to takeoff
-    IF currentProgress = 0 AND currentLegID IS NULL AND currentTime < nextTime THEN
-      SET currentTime = nextTime;
-    END IF;
+    -- If an airplane is in the air and waiting to land
+    If airplane_status = 'in_flight' AND currentLegID IS NULL THEN
+		execute flight_land;
+		execute passengers_disembark;
     
     -- If an airplane is on_ground and ready to takeoff
-    IF currentProgress = 0 AND currentLegID IS NULL AND currentTime >= nextTime THEN
+    IF airplane_status = 'on_ground' AND currentLegID IS NULL THEN
       -- Get the next leg in the route, if any
       SELECT legID
       INTO nextLegID
       FROM route_path
       WHERE routeID = (SELECT routeID FROM flight WHERE flightID = currentFlightID)
-      AND sequence = 1;
+      AND sequence like (select sequence from route_path where sequence + 1);
       
       IF nextLegID IS NOT NULL THEN
         -- Calculate the time needed for the next leg based on leg distance and airplane speed
-        SELECT leg_distance / airplane_speed INTO @time_needed
-        FROM leg
-        JOIN airplane ON leg.airlineID = airplane.airlineID
-        WHERE legID = nextLegID AND airplane.tail_num = (SELECT support_tail FROM flight WHERE flightID = currentFlightID);
-        
-        SET nextTime = ADDTIME(currentTime, @time_needed);
-        UPDATE flight
-        SET progress = 1,
-            next_time = nextTime
-        WHERE flightID = currentFlightID;
+        execute leg_time;
       ELSE
         -- If an airplane is on_ground and has reached the end of its route
         -- Update airplane crew and retire the flight
-        UPDATE flight
-        SET progress = -1, -- Marking as retired
-            next_time = NULL
-        WHERE flightID = currentFlightID;
+        if airplane_status = 'on_ground' then
+			execute recycle_crew;
+			execute retire_flight;
+			end if;
+		end if;
         
         UPDATE airplane
         SET locationID = NULL -- Removing the airplane from the system
