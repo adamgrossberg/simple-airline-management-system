@@ -379,11 +379,11 @@ update passenger join passenger_vacations on passenger.personID = passenger_vaca
 		where person.locationID = airplaneLocation and passenger.personID in 
 			(select personID from passenger_vacations where passenger_vacations.airportID = airportName and sequence = 1);
 
+
     delete from passenger_vacations 
     where airportID = airportName and sequence = 1 and personID in (select personID from person where locationID = airportLocation);
 
     DROP TEMPORARY TABLE IF EXISTS temp_sequence_update;
-
 
     CREATE TEMPORARY table temp_sequence_update
     
@@ -482,8 +482,6 @@ end if;
 end //
 
 delimiter ;
-
-
 
 -- [12] retire_flight()
 -- -----------------------------------------------------------------------------
