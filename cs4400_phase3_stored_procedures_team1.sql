@@ -155,8 +155,7 @@ create procedure offer_flight (in ip_flightID varchar(50), in ip_routeID varchar
     in ip_support_airline varchar(50), in ip_support_tail varchar(50), in ip_progress integer,
     in ip_airplane_status varchar(100), in ip_next_time time, in ip_cost integer)
 sp_main: begin
-<<<<<<< Updated upstream
-=======
+
 IF (ip_routeID not in (select routeID from route)) 
 	then leave sp_main; END if; -- Valid route checking
     
@@ -183,7 +182,7 @@ if (ip_flightID in (select flightID from flight)) then
     
 insert into flight values (ip_flightID, ip_routeID, ip_support_airline, ip_support_tail, ip_progress, 
 	ip_airplane_status, ip_next_time, ip_cost);
->>>>>>> Stashed changes
+
 
 end //
 delimiter ;
@@ -247,12 +246,7 @@ sp_main: begin
 declare legTime datetime default '00:00:00';
 declare numpilots integer default 0;
 # Krishnav make sure to increase progress by 1 here. I don't do it in flight_landing
-<<<<<<< Updated upstream
-set distance = 5;
-set speedvar = (select speed from airplane where );
 
-=======
--- set speedvar
 
 IF (Select plane_type from airplane where tail_num = 
 	(select support_tail from flight where flightID = ip_flightID) = 'prop') then set numpilots = 1;
@@ -274,12 +268,11 @@ IF (Select count(*) from pilot where commanding_flight = ip_flightID) != numpilo
     progress = progress + 1,
     next_time = addtime(next_time, legTime) 
     where flightID = ip_flightID;
->>>>>>> Stashed changes
 
 end //
 delimiter ;
 
-call flight_takeoff('dl_10');
+
 
 -- [8] passengers_board()
 -- -----------------------------------------------------------------------------
@@ -320,41 +313,32 @@ END IF;
 set onboard = (select count(*) from person where personID in #Computes the number of people currently on the plane
 (select personID from passenger) and locationID = ploc);
 
-# Gets a list of all other flights currently at the same airport. Still have to implement. 
-#select flightID from flight where flightID != ip_flightID and (select locationID from airport where airportID in 
-#(select departure from leg where legID in (select legID from route_path where routeID in 
-#(select routeID from flight where flightID != ip_flightID) and sequence =
- #(select progress from flight where progress = 0)))
- #union (select arrival from leg where legID in (select legID from route_path where routeID in 
-#(select routeID from flight where flightID != ip_flightID) and sequence =
- #(select progress from flight where progress > 0)))
- #) = port;
 
-# Uses above list to create a list of alternate airports offered by other flights. Still have to implement. 
-
-
-# Counts the number of potential passengers. Checks if a destination offered by another flight is better (have to impelment)
+# Counts the number of potential passengers. 
 set cap = (select count(*) from passenger_vacations where personID in 
 (select personID from person where locationID = port) #finds all the people currently at the right airport
-#checks if their destination is one of the stops
+#checks if their preferred destination is one of the stops
 and airportID in (select airportID from airport where airportID in( 
 select arrival from leg where legID in 
-(select legID from route_path where routeID = route and sequence > prog))));
+(select legID from route_path where routeID = route and sequence > prog))) and sequence = 1 
+and personID in (select personID from passenger where funds >= (select cost from flight where flightID = ip_flightID)));
 # Makes sure that people can actually board the plane
 IF (cap + onboard <= (select seat_capacity from airplane where locationID = ploc) and cap > 0) THEN #OUTER LOOP 3
 
 
 update person
 set locationID = ploc
-where personID in (select personID from passenger_vacations where airportID in (
+where personID in (select personID from passenger_vacations where (airportID in (
 select airportID from airport where airportID in(select arrival from leg where legID in 
-(select legID from route_path where routeID = route and sequence > prog)))) and locationID = port;
+(select legID from route_path where routeID = route and sequence > prog))) and sequence = 1)) and locationID = port
+and personID in (select personID from passenger where funds >= (select cost from flight where flightID = ip_flightID));
 
 END IF; ##OUTER LOOP 3
 END IF; ##OUTER LOOP 2
 END IF; ##OUTER LOOP 1
 end //
 delimiter ;
+
 
 -- [9] passengers_disembark()
 -- -----------------------------------------------------------------------------
@@ -366,11 +350,46 @@ drop procedure if exists passengers_disembark;
 delimiter //
 create procedure passengers_disembark (in ip_flightID varchar(50))
 sp_main: begin
-declare arrivalAirport varchar(50);
-if ip_flightID is null then leave sp_main; end if;
-if ip_flightID not in (select flight_ID from flight) then leave sp_main; end if;
+declare airportName varchar(50);
+declare airportLocation varchar(50);
+declare airplaneLocation varchar(50);
+IF ip_flightID is null or 
+	(select airplane_status from flight where ip_flightID = flightID) = 'in_flight' then 
+		leave sp_main; END if; -- Checking flight status
+        
+select l.departure into airportName from flight f join route_path on f.routeID = route_path.routeID
+	join leg l on route_path.legID = l.legID where flightID = ip_flightID and progress = sequence; -- Checking airport name
+    
+select locationID into airportLocation from flight f join route_path on f.routeID = route_path.routeID 
+    join leg l on route_path.legID = l.legID join airport on departure = airportID
+		where flightID = ip_flightID and progress = sequence; -- Checking location
+
+select airplane.locationID into airplaneLocation from flight left join airplane on support_airline = airlineID 
+	and support_tail = tail_num where flightID = ip_flightID;
+    
+update passenger join passenger_vacations on passenger.personID = passenger_vacations.personID
+    join person on person.personID = passenger.personID set person.locationID = airportLocation
+		where person.locationID = airplaneLocation and passenger.personID in 
+			(select personID from passenger_vacations where passenger_vacations.airportID = airportName and sequence = 1);
+
+    delete from passenger_vacations 
+    where airportID = airportName and sequence = 1 and personID in (select personID from person where locationID = airportLocation);
+
+    DROP TEMPORARY TABLE IF EXISTS temp_sequence_update;
 
 
+    CREATE TEMPORARY table temp_sequence_update
+    
+    SELECT personID, 
+        ROW_NUMBER() OVER (PARTITION BY personID ORDER BY sequence) as new_sequence
+    FROM passenger_vacations;
+
+    UPDATE passenger_vacations 
+    JOIN temp_sequence_update ON passenger_vacations.personID = temp_sequence_update.personID AND passenger_vacations.sequence = temp_sequence_update.new_sequence
+    SET passenger_vacations.sequence = temp_sequence_update.new_sequence;
+
+    -- Drop temporary table
+    DROP TEMPORARY TABLE temp_sequence_update;
 end //
 delimiter ;
 
@@ -602,21 +621,32 @@ delimiter ;
 -- -----------------------------------------------------------------------------
 create or replace view flights_in_the_air (departing_from, arriving_at, num_flights,
 	flight_list, earliest_arrival, latest_arrival, airplane_list) as
-select A.airportID, B.airportID, count(*), flightID, min(next_time), max(next_time), tail_num
-from airport as A, airport as B, flight, airplane
-where airplane_status = 'in_flight' and tail_num = support_tail
-and A.airportID = (select departure from leg where legID in 
-(select legID from route_path where (routeID in (select routeID from flight where airplane_status = 'in_flight')
-and sequence = progress))) and B.airportID = (select arrival from leg where legID in 
-(select legID from route_path where (routeID in (select routeID from flight where airplane_status = 'in_flight')
-and sequence = progress))); 
+select l.departure as departing_from, l.arrival as arriving_at, count(distinct f.flightID) as num_flights, 
+group_concat(distinct concat(f.flightID) order by f.flightID asc separator ',') flight_list, 
+min(f.next_time) as earliest_arrival, max(f.next_time) as latest_arrival, 
+group_concat(a.locationID order by f.flightID asc separator ',') airplane_list
+from flight as f join route_path rp on f.routeID = rp.routeID and f.progress = rp.sequence join leg l 
+on rp.legID = l.legID left join airplane a on f.support_airline = a.airlineID and f.support_tail = a.tail_num
+where airplane_status = 'in_flight'
+group by l.departure, l.arrival; 
+
 -- [15] flights_on_the_ground()
 -- -----------------------------------------------------------------------------
 /* This view describes where flights that are currently on the ground are located. */
 -- -----------------------------------------------------------------------------
 create or replace view flights_on_the_ground (departing_from, num_flights,
 	flight_list, earliest_arrival, latest_arrival, airplane_list) as 
-select '_', '_', '_', '_', '_', '_';
+	
+select l.departure as departing_from,
+	count(f.flightID) as num_flights,
+    group_concat(f.flightID order by f.flightID asc separator ',') flight_list,
+    min(f.next_time) as earlies_arrival,
+    max(f.next_time) as latest_arrival,
+    group_concat(distinct concat(a.locationID) order by f.flightID asc separator ',') as airplane_list
+    from flight f join route_path rp on f.routeID = rp.routeID and f.progress = rp.sequence
+    join leg l on rp.legID = l.legID left join airplane a on f.support_airline = a.airlineID and f.support_tail = a.tail_num
+    where airplane_status = 'on_ground'
+    group by l.departure, l.arrival;
 
 -- [16] people_in_the_air()
 -- -----------------------------------------------------------------------------
@@ -625,7 +655,17 @@ select '_', '_', '_', '_', '_', '_';
 create or replace view people_in_the_air (departing_from, arriving_at, num_airplanes,
 	airplane_list, flight_list, earliest_arrival, latest_arrival, num_pilots,
 	num_passengers, joint_pilots_passengers, person_list) as
-select '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_';
+select l.departure as departing_from, l.arrival as arriving_at, count(distinct f.flightID) as num_airplanes, 
+group_concat(distinct concat(a.locationID) order by f.flightID asc separator ',') airplane_list, 
+group_concat(distinct concat(f.flightID) order by f.flightID asc separator ',') flight_list,
+min(f.next_time) as earliest_arrival, max(f.next_time) as latest_arrival, count(pil.personID) as num_pilots, count(pa.personID) as 
+num_passengers, count(p.personID) as joint_pilots_passengers, group_concat(p.personID order by p.personID asc separator ',')
+person_list
+from flight as f join route_path as rp on rp.routeID = f.routeID and rp.sequence = f.progress join leg l on rp.legID = l.legID
+left join airplane a on a.airlineID = f.support_airline and a.tail_num = f.support_tail left join person as p 
+on p.locationID = a.locationID left join pilot pil on p.personID = pil.personID left join passenger pa on p.personID = pa.personID
+where airplane_status = 'in_flight'
+group by l.departure, l.arrival;
 
 -- [17] people_on_the_ground()
 -- -----------------------------------------------------------------------------
@@ -633,7 +673,20 @@ select '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_';
 -- -----------------------------------------------------------------------------
 create or replace view people_on_the_ground (departing_from, airport, airport_name,
 	city, state, country, num_pilots, num_passengers, joint_pilots_passengers, person_list) as
-select '_', '_', '_', '_', '_', '_', '_', '_', '_', '_';
+select 
+a.airportID as departing_from,
+a.locationID as airport,
+a.airport_name,
+a.city,
+a.state,
+a.country,
+(select COUNT(*) from person p1 where p1.locationID = a.locationID and p1.personID in
+	(select personID from pilot)) as num_pilots,
+(select COUNT(*) from person p2 where p2.locationID = a.locationID and p2.personID in
+	(select personID from passenger)) as num_passengers,
+COUNT(*) as joint_pilots_passengers, 
+group_concat(p.personID) as person_list 
+from person p join airport a on p.locationID = a.locationID group by a.airportID;
 
 -- [18] route_summary()
 -- -----------------------------------------------------------------------------
@@ -641,7 +694,11 @@ select '_', '_', '_', '_', '_', '_', '_', '_', '_', '_';
 -- -----------------------------------------------------------------------------
 create or replace view route_summary (route, num_legs, leg_sequence, route_length,
 	num_flights, flight_list, airport_sequence) as
-select '_', '_', '_', '_', '_', '_', '_';
+select rp.routeID, count(distinct l.legID), group_concat(distinct concat(l.legID) order by rp.sequence asc separator ',') 
+leg_sequence, sum(l.distance), count(distinct f.flightID), 
+group_concat(distinct concat(f.flightID) order by f.flightID asc separator ',') flight_list, 
+group_concat(distinct concat(l.departure, '->', l.arrival) order by rp.sequence asc separator ',') airport_sequence
+from route_path rp join leg l on rp.legID = l.legID left join flight f on rp.routeID = f.routeID group by rp.routeID;
 
 -- [19] alternative_airports()
 -- -----------------------------------------------------------------------------
