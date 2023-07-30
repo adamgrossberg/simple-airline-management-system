@@ -414,12 +414,13 @@ create procedure assign_pilot (in ip_flightID varchar(50), ip_personID varchar(5
 sp_main: begin
 DECLARE ploc varchar(50); # the locationID of the plane operating the flight
 DECLARE ptype varchar(100); #propeller or jet
-DECLARE port varchar(50);
-DECLARE route varchar(50);
+DECLARE port varchar(50); #locationID of the airport
+DECLARE route varchar(50); #routeID of the flight
 
 
 set ploc = (select locationID from airplane where (airlineID, tail_num) in 
 (select support_airline, support_tail from flight where flightID = ip_flightID));
+if (ploc is null or ip_flightID is null or ip_personID is null) then leave sp_main; end if;
 set ptype = (select plane_type from airplane where locationID = ploc);
 set route = (select routeID from flight where flightID = ip_flightID);
 
@@ -444,7 +445,7 @@ where personID = ip_personID;
 end if;
 end if;
 end //
-delimiter ;
+delimiter;
 
 -- [11] recycle_crew()
 -- -----------------------------------------------------------------------------
