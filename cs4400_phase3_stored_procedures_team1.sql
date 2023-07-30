@@ -456,10 +456,11 @@ delimiter //
 create procedure recycle_crew (in ip_flightID varchar(50))
 sp_main: begin
 declare onboard int default 0;
+DECLARE ploc varchar(50);
+declare end varchar(50);
 if ip_flightID is null then leave sp_main; end if;
 #Check that the plane is empty
-set onboard = (select count(*) from person where personID in #Computes the number of people currently on the plane
-(select personID from passenger) and locationID = ploc);
+set onboard =  (select count(*) from person where locationID = ploc);
 if onboard = 0 and ((select airportID from airport where locationID = ploc) in (end)) then
 #Remove Pilots
 update pilot
