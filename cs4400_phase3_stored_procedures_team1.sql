@@ -551,10 +551,10 @@ DECLARE currentFlightID VARCHAR(50);
       WHERE flightID = currentFlightID;
     END IF;
     
-    -- If an airplane is on_ground and waiting to takeoff
-    IF airplane_status = 'on_ground' AND currentLegID IS NULL THEN
-      SET nextTime = nextTime + "01:00:00";
-    END IF;
+    -- If an airplane is in the air and waiting to land
+    If airplane_status = 'in_flight' AND currentLegID IS NULL THEN
+		execute flight_land;
+		execute passengers_disembark;
     
     -- If an airplane is on_ground and ready to takeoff
     IF airplane_status = 'on_ground' AND currentLegID IS NULL THEN
@@ -567,22 +567,15 @@ DECLARE currentFlightID VARCHAR(50);
       
       IF nextLegID IS NOT NULL THEN
         -- Calculate the time needed for the next leg based on leg distance and airplane speed
-        SELECT leg_distance / airplane_speed INTO @time_needed
-        FROM leg
-        JOIN airplane ON leg.airlineID = airplane.airlineID
-        WHERE legID = nextLegID AND airplane.tail_num = (SELECT support_tail FROM flight WHERE flightID = currentFlightID);
-        
-        UPDATE flight
-        SET progress = 1,
-            next_time = nextTime
-        WHERE flightID = currentFlightID;
+        execute leg_time;
       ELSE
         -- If an airplane is on_ground and has reached the end of its route
         -- Update airplane crew and retire the flight
-        UPDATE flight
-        SET progress = -1, -- Marking as retired
-            next_time = NULL
-        WHERE flightID = currentFlightID;
+        if airplane_status = 'on_ground' then
+			execute recycle_crew;
+			execute retire_flight;
+			end if;
+		end if;
         
         UPDATE airplane
         SET locationID = NULL -- Removing the airplane from the system
