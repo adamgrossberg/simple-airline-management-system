@@ -662,16 +662,18 @@ COUNT(*) as joint_pilots_passengers,
 group_concat(p.personID) as person_list 
 from person p join airport a on p.locationID = a.locationID group by a.airportID;
 
+
 -- [18] route_summary()
 -- -----------------------------------------------------------------------------
 /* This view describes how the routes are being utilized by different flights. */
 -- -----------------------------------------------------------------------------
 create or replace view route_summary (route, num_legs, leg_sequence, route_length,
 	num_flights, flight_list, airport_sequence) as
-select flight.routeID as "route", count(route_path.legID) as "num_legs", route_path.sequence as "leg_sequence", leg.distance as "route_length",
-	count(flight.flightID) as "num_flights", group_concat(distinct concat(flight.flightID) order by flight.flightID asc separator ',') as "flight_list", group_concat(distinct concat(departure, arrival) order by sequence asc separator ',') as "airport_sequence"
-    from flight, route_path, leg
-    group by flight.routeID, route_path.sequence, leg.distance;
+select rp.routeID, count(distinct l.legID), group_concat(distinct concat(l.legID) order by rp.sequence asc separator ',') 
+leg_sequence, sum(l.distance), count(distinct f.flightID), 
+group_concat(distinct concat(f.flightID) order by f.flightID asc separator ',') flight_list, 
+group_concat(distinct concat(l.departure, '->', l.arrival) order by rp.sequence asc separator ',') airport_sequence
+from route_path rp join leg l on rp.legID = l.legID left join flight f on rp.routeID = f.routeID group by rp.routeID;
    
 
 
