@@ -260,12 +260,12 @@ set planeType = (Select plane_type from airplane where (airlineID, tail_num) in
 IF (planeType = 'prop') then set numpilots = 1;
 		ELSE set numpilots = 2; END if;
 if(select count(*) from pilot where commanding_flight = ip_flightID and (personID, concat(planeType, 's'))
- in (select * from pilot_licenses where license = concat(planeType, 's')) < numpilots) then
+ in (select * from pilot_licenses where license = concat(planeType, 's'))) < numpilots then
 	update flight
     set next_time = ADDTIME(next_time, 3000)
     where flightID = ip_flightID;
     leave sp_main; END if;
-    
+
 
     set legTime = leg_time((select distance from leg where legID in
 		(select legID from route_path where (routeID, sequence - 1) in
@@ -421,6 +421,10 @@ DECLARE port varchar(50); #locationID of the airport
 DECLARE route varchar(50); #routeID of the flight
 
 if ip_flightID is null or ip_personID is null then leave sp_main; end if;
+
+if (ip_personID not in (select personID from pilot)) then leave sp_main; end if;
+
+if (select commanding_flight from pilot where personID = ip_personID) is not null then leave sp_main; end if;
 
 set ploc = (select locationID from airplane where (airlineID, tail_num) in 
 (select support_airline, support_tail from flight where flightID = ip_flightID));
@@ -741,4 +745,3 @@ group_concat(distinct concat(airportID) order by airportID asc separator ',') as
 group_concat(distinct concat(airport_name) order by airportID asc separator ',') as "airport_name_list"
 from airport
 group by city, state, country having num_airports > 1;
-  
