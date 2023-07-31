@@ -265,7 +265,7 @@ if(select count(*) from pilot where commanding_flight = ip_flightID and (personI
     set next_time = ADDTIME(next_time, 3000)
     where flightID = ip_flightID;
     leave sp_main; END if;
-
+    
 
     set legTime = leg_time((select distance from leg where legID in
 		(select legID from route_path where (routeID, sequence - 1) in
