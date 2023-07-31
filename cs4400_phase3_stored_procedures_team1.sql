@@ -171,18 +171,6 @@ IF ip_progress >= (select max(sequence) from route_path where routeID = ip_route
 
 # THis line ends the procedure if the flight already exists. 
 IF (ip_flightID in (select flightID from flight)) then leave sp_main; end if; 
--- This block of code would update flight information for a currently existing flight. 
--- if (ip_flightID in (select flightID from flight)) then
--- 	update flight
---     set routeID = ip_routeID,
--- 		support_airline = ip_support_airline,
---         support_tail = ip_support_tail,
---         progress = ip_progess,
---         airplane_status = 'on_ground',
---         next_time = ip_next_time,
---         cost = ip_cost
---     where flightID = ip_flightID; leave sp_main; END if;
-    
 insert into flight values (ip_flightID, ip_routeID, ip_support_airline, ip_support_tail, ip_progress, 
 	 'on_ground', MOD(ip_next_time, 240000), ip_cost);
 
@@ -250,6 +238,10 @@ declare legTime time default 0;
 declare numpilots integer default 0;
 declare planeType varchar(100);
 
+if ip_flightID not in (select flightID from flight) then leave sp_main; end if;
+
+if (select airplane_status from flight where flightID = ip_flightID) = 'in_flight' then leave sp_main; end if;
+
 #Flight cannot take off if no further destinations
 IF ((select progress from flight where flightID = ip_flightID) >= (select max(sequence) from route_path 
 where routeID = (select routeID from flight where flightID = ip_flightID)))
@@ -258,7 +250,7 @@ Then leave sp_main; end if;
 set planeType = (Select plane_type from airplane where (airlineID, tail_num) in  
 	(select support_airline, support_tail from flight where flightID = ip_flightID));
 IF (planeType = 'prop') then set numpilots = 1;
-		ELSE set numpilots = 2; END if;
+		ELSE set numpilots = 2; END if; 
 if(select count(*) from pilot where commanding_flight = ip_flightID and (personID, concat(planeType, 's'))
  in (select * from pilot_licenses where license = concat(planeType, 's'))) < numpilots then
 	update flight
@@ -296,6 +288,7 @@ drop procedure if exists passengers_board;
 delimiter //
 create procedure passengers_board (in ip_flightID varchar(50))
 sp_main: begin
+
 DECLARE cap integer DEFAULT 0; #Total number of eligible passengers to board
 DECLARE onboard integer DEFAULT 0; #The number of passengers currently on the plane
 DECLARE ploc varchar(50); #the locationID of the airplane
@@ -335,13 +328,22 @@ and personID in (select personID from passenger where funds >= (select cost from
 # Makes sure that people can actually board the plane
 IF (cap + onboard <= (select seat_capacity from airplane where locationID = ploc) and cap > 0) THEN #OUTER LOOP 3
 
-
-update person
-set locationID = ploc
-where personID in (select personID from passenger_vacations where (airportID in (
+update passenger join person on passenger.personID = person.personID
+set funds = funds - (select cost from flight where flightID = ip_flightID), locationID = ploc
+where person.personID in (select personID from passenger_vacations where (airportID in (
 select airportID from airport where airportID in(select arrival from leg where legID in 
-(select legID from route_path where routeID = route and sequence > prog))) and sequence = 1)) and locationID = port
-and personID in (select personID from passenger where funds >= (select cost from flight where flightID = ip_flightID));
+(select legID from route_path where routeID = route and sequence > prog))) and sequence = 1)) and 
+locationID = port and funds >= (select cost from flight where flightID = ip_flightID);
+
+
+update airline
+set revenue = revenue + cap * (select cost from flight where flightID = ip_flightID)
+where airlineID in (select support_airline from flight where flightID = ip_flightID);
+
+
+
+
+
 
 END IF; ##OUTER LOOP 3
 END IF; ##OUTER LOOP 2
@@ -745,3 +747,4 @@ group_concat(distinct concat(airportID) order by airportID asc separator ',') as
 group_concat(distinct concat(airport_name) order by airportID asc separator ',') as "airport_name_list"
 from airport
 group by city, state, country having num_airports > 1;
+
